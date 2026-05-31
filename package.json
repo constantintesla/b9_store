@@ -1,0 +1,36 @@
+{
+  "name": "b9_store",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "android:dev": "tauri android dev",
+    "android:build": "powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1",
+    "android:build:release": "powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1 -Release",
+    "android:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-android.ps1",
+    "android:build:apk": "powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1 -Release"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-fs": "^2.5.1",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-os": "^2.3.2",
+    "html5-qrcode": "^2.3.8",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "recharts": "^3.8.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
+  }
+}

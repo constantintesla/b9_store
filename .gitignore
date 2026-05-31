@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Rust / Tauri
+src-tauri/target/
+
+# Android signing (never commit)
+src-tauri/gen/android/keystore/
+**/keystore.properties
+!**/keystore.properties.example
+
+# Android build artifacts
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/build/
+src-tauri/gen/android/local.properties
+src-tauri/gen/android/.tauri/
+src-tauri/gen/android/app/src/main/jniLibs/**/*.so
+
+# APK / bundles
+*.apk
+*.aab
+*.msi
+*.exe
+*.dmg
+*.AppImage
+
+# Local SQLite / registry (import via app UI)
+*.db
+!**/.gitkeep
