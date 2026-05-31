@@ -34,10 +34,9 @@ lerna-debug.log*
 # Rust / Tauri
 src-tauri/target/
 
-# Android signing (never commit)
-src-tauri/gen/android/keystore/
-**/keystore.properties
-!**/keystore.properties.example
+# Android signing (never commit keys; example template is ok)
+src-tauri/gen/android/keystore/*
+!src-tauri/gen/android/keystore/keystore.properties.example
 
 # Android build artifacts
 src-tauri/gen/android/.gradle/
