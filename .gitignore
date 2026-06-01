@@ -1,3 +1,6 @@
+# Android SDK archives (download via scripts/setup-android.ps1)
+commandlinetools*.zip
+
 # Dependencies
 node_modules/
 
