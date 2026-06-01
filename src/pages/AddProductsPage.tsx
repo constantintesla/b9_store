@@ -3,10 +3,10 @@ import { api } from "../api/tauri";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { useCameraScan } from "../hooks/useCameraScan";
 import { usePlatform } from "../hooks/usePlatform";
-
-function normalizeCode(raw: string): string {
-  return raw.trim();
-}
+import {
+  looksLikeUrlOrCitizenQr,
+  normalizeScanCode,
+} from "../utils/scan";
 
 export function AddProductsPage() {
   const { isMobile } = usePlatform();
@@ -29,27 +29,38 @@ export function AddProductsPage() {
 
   const totalQty = scans.length;
 
-  const addCode = useCallback(async (raw: string) => {
-    const trimmed = normalizeCode(raw);
-    if (!trimmed) return;
-
-    let code = trimmed;
-    try {
-      const parsed = await api.parseQr(trimmed);
-      if (parsed) code = parsed;
-    } catch {
-      /* use raw */
-    }
+  const addCode = useCallback((raw: string) => {
+    const code = normalizeScanCode(raw);
+    if (!code) return;
 
     setScans((prev) => [...prev, code]);
     setStatus(`Отсканировано: ${code}`);
     setError("");
   }, []);
 
+  const addCodeFromScan = useCallback(
+    async (raw: string) => {
+      let code = normalizeScanCode(raw);
+      if (!code) return;
+
+      if (looksLikeUrlOrCitizenQr(raw)) {
+        try {
+          const parsed = await api.parseQr(raw.trim());
+          if (parsed) code = normalizeScanCode(parsed);
+        } catch {
+          /* штрихкод как есть */
+        }
+      }
+
+      addCode(code);
+    },
+    [addCode],
+  );
+
   useBarcodeScanner({
-    enabled: !isMobile,
+    enabled: true,
     onScan: (code) => {
-      void addCode(code);
+      void addCodeFromScan(code);
     },
   });
 
@@ -185,10 +196,14 @@ export function AddProductsPage() {
               type="button"
               className="primary scan-btn"
               onClick={() =>
-                startScan("Штрихкод / QR", (code) => void addCode(code))
+                startScan(
+                  "Штрихкод / QR",
+                  (code) => void addCodeFromScan(code),
+                  { continuous: true },
+                )
               }
             >
-              Сканировать камерой
+              Сканировать камерой (подряд)
             </button>
           )}
           <div className="field-row">
@@ -198,7 +213,7 @@ export function AddProductsPage() {
               placeholder="Штрихкод / QR вручную"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && manualCode.trim()) {
-                  void addCode(manualCode.trim());
+                  void addCodeFromScan(manualCode.trim());
                   setManualCode("");
                 }
               }}
@@ -207,7 +222,7 @@ export function AddProductsPage() {
               type="button"
               onClick={() => {
                 if (manualCode.trim()) {
-                  void addCode(manualCode.trim());
+                  void addCodeFromScan(manualCode.trim());
                   setManualCode("");
                 }
               }}

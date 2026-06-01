@@ -3,6 +3,10 @@ use crate::models::{Product, ProductInput};
 use rusqlite::{params, OptionalExtension};
 use tauri::State;
 
+fn normalize_barcode(s: &str) -> String {
+    s.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
 fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<Product> {
     Ok(Product {
         id: row.get(0)?,
@@ -50,9 +54,13 @@ pub fn get_product_by_barcode(
     state: State<'_, DbState>,
 ) -> Result<Option<Product>, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
+    let code = normalize_barcode(&barcode);
+    if code.is_empty() {
+        return Ok(None);
+    }
     conn.query_row(
         "SELECT id, barcode, name, price, stock_qty, active, created_at FROM products WHERE barcode = ?1 AND active = 1",
-        [barcode.trim()],
+        [code],
         row_to_product,
     )
     .optional()
@@ -65,7 +73,7 @@ pub fn create_product(
     state: State<'_, DbState>,
 ) -> Result<Product, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
-    let barcode = input.barcode.trim().to_string();
+    let barcode = normalize_barcode(&input.barcode);
     if barcode.is_empty() {
         return Err("Штрихкод обязателен".into());
     }
@@ -101,7 +109,7 @@ pub fn update_product(
     conn.execute(
         "UPDATE products SET barcode = ?1, name = ?2, price = ?3, stock_qty = ?4, active = ?5 WHERE id = ?6",
         params![
-            input.barcode.trim(),
+            normalize_barcode(&input.barcode),
             input.name.trim(),
             input.price,
             input.stock_qty,

@@ -3,12 +3,16 @@
 
 $ErrorActionPreference = "Stop"
 
+$Root = Split-Path $PSScriptRoot -Parent
+$LocalCmdlineZip = Join-Path $Root "commandlinetools-win-11076708_latest.zip"
+
 $SdkRoot = Join-Path $env:LOCALAPPDATA "Android\Sdk"
 $CmdToolsDir = Join-Path $SdkRoot "cmdline-tools\latest"
 $SdkManager = Join-Path $CmdToolsDir "bin\sdkmanager.bat"
 
 $JdkCandidates = @(
     "C:\Program Files\Eclipse Adoptium\jdk-21.0.6.7-hotspot",
+    "C:\Program Files\Eclipse Adoptium\jdk-21*",
     "C:\Program Files\Java\jdk-17",
     "C:\Program Files\Eclipse Adoptium\jdk-17*"
 )
@@ -37,12 +41,21 @@ Write-Host "ANDROID_HOME=$SdkRoot"
 New-Item -ItemType Directory -Force -Path $SdkRoot | Out-Null
 
 if (-not (Test-Path $SdkManager)) {
-    $zipUrl = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip"
-    $zipPath = Join-Path $env:TEMP "android-cmdline-tools.zip"
-    $extractDir = Join-Path $env:TEMP "android-cmdline-tools"
+    $extractDir = Join-Path $env:TEMP ("android-cmdline-tools-{0}" -f ([guid]::NewGuid().ToString("N")))
+    $zipPath = $null
+    $removeZipAfter = $false
 
-    Write-Host "Скачивание Android command-line tools..."
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+    if (Test-Path $LocalCmdlineZip) {
+        Write-Host "Используем локальный архив: $LocalCmdlineZip"
+        $zipPath = $LocalCmdlineZip
+    } else {
+        $zipUrl = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip"
+        $zipPath = Join-Path $env:TEMP ("android-cmdline-tools-{0}.zip" -f ([guid]::NewGuid().ToString("N")))
+        $removeZipAfter = $true
+
+        Write-Host "Скачивание Android command-line tools..."
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+    }
 
     if (Test-Path $extractDir) {
         Remove-Item $extractDir -Recurse -Force
@@ -55,7 +68,9 @@ if (-not (Test-Path $SdkManager)) {
         Remove-Item $CmdToolsDir -Recurse -Force
     }
     Move-Item $src.FullName $CmdToolsDir
-    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    if ($removeZipAfter) {
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Write-Host "Установка SDK компонентов (platform-tools, build-tools, platform, ndk)..."
@@ -68,7 +83,16 @@ $packages = @(
 
 foreach ($pkg in $packages) {
     Write-Host "  -> $pkg"
-    echo "y" | & $SdkManager $pkg 2>&1 | Out-Host
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        echo "y" | & $SdkManager $pkg 2>&1 | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) {
+            throw "sdkmanager завершился с кодом $LASTEXITCODE для пакета: $pkg"
+        }
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
 }
 
 Write-Host ""

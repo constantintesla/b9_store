@@ -8,6 +8,7 @@ import {
   citizenDisplayFio,
   citizenDisplayNationality,
 } from "../utils/citizen";
+import { normalizeScanCode } from "../utils/scan";
 
 interface CartLine extends SaleItemInput {
   key: string;
@@ -65,7 +66,7 @@ export function CheckoutPage() {
         return;
       }
       try {
-        const product = await api.getProductByBarcode(barcode);
+        const product = await api.getProductByBarcode(normalizeScanCode(barcode));
         if (!product) {
           setError(`Товар «${barcode}» не найден. Добавьте в разделе «Товары».`);
           return;
@@ -108,7 +109,7 @@ export function CheckoutPage() {
   );
 
   useBarcodeScanner({
-    enabled: !isMobile,
+    enabled: true,
     onScan: (code) => {
       if (!buyer) void resolveBuyer(code);
       else void addProduct(code);
@@ -232,7 +233,11 @@ export function CheckoutPage() {
               className="primary scan-btn"
               disabled={!buyer}
               onClick={() =>
-                startScan("Штрихкод товара", (code) => void addProduct(code))
+                startScan(
+                  "Штрихкод товара",
+                  (code) => void addProduct(code),
+                  { continuous: true },
+                )
               }
             >
               Сканировать товар
