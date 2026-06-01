@@ -6,6 +6,8 @@ import type { Citizen } from "../../shared/types";
 import { citizenDisplayFio, citizenDisplayNationality } from "../utils/citizen";
 import { isMobilePlatform, usePlatform } from "../hooks/usePlatform";
 
+const emptyManual = { fio: "", passport_number: "" };
+
 export function CitizensPage() {
   const { isMobile } = usePlatform();
   const [citizens, setCitizens] = useState<Citizen[]>([]);
@@ -15,6 +17,7 @@ export function CitizensPage() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [manual, setManual] = useState(emptyManual);
 
   const load = useCallback(async () => {
     try {
@@ -61,22 +64,79 @@ export function CitizensPage() {
     }
   };
 
+  const addManual = async () => {
+    setError("");
+    setStatus("");
+    setBusy(true);
+    try {
+      const created = await api.createCitizen(manual);
+      setManual(emptyManual);
+      setStatus(`Добавлен: ${created.fio}`);
+      await load();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className={`page ${isMobile ? "mobile-page" : ""}`}>
       <header className="page-header">
         <h1>Покупатели</h1>
         <p>
-          Реестр граждан из b9_docs · всего: {count}
-          {importedAt && ` · обновлено: ${importedAt}`}
+          Реестр и ручное добавление · всего: {count}
+          {importedAt && ` · импорт: ${importedAt}`}
         </p>
       </header>
 
+      <section className="panel form-panel">
+        <h2>Добавить вручную</h2>
+        <div className={`form-grid ${isMobile ? "single-col" : ""}`}>
+          <label>
+            ФИО
+            <input
+              value={manual.fio}
+              onChange={(e) => setManual({ ...manual, fio: e.target.value })}
+              placeholder="Иванов Иван Иванович"
+            />
+          </label>
+          <label>
+            Номер паспорта
+            <input
+              value={manual.passport_number}
+              onChange={(e) =>
+                setManual({ ...manual, passport_number: e.target.value })
+              }
+              placeholder="1234 567890"
+            />
+          </label>
+        </div>
+        <div className="actions">
+          <button
+            type="button"
+            className="primary"
+            disabled={busy}
+            onClick={() => void addManual()}
+          >
+            {busy ? "Сохранение…" : "Добавить покупателя"}
+          </button>
+        </div>
+        <p className="muted" style={{ marginTop: "0.5rem" }}>
+          На кассе можно ввести номер паспорта вместо QR.
+        </p>
+      </section>
+
       <div className="actions top-actions">
-        <button type="button" className="primary" disabled={busy} onClick={() => void importRegistry()}>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void importRegistry()}
+        >
           {busy ? "Импорт…" : "Импорт registry.db"}
         </button>
         <input
-          placeholder="Поиск: ФИО, позывной, номер, QR"
+          placeholder="Поиск: ФИО, позывной, номер, паспорт, QR"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -93,7 +153,8 @@ export function CitizensPage() {
                 <strong>{citizenDisplayFio(c)}</strong>
                 <div>{citizenDisplayNationality(c)}</div>
                 <div className="muted">
-                  {c.group} · {c.qr_lookup}
+                  паспорт: {c.passport_number || "—"} · {c.group || "—"} ·{" "}
+                  {c.qr_lookup}
                 </div>
               </li>
             ))}
@@ -103,6 +164,7 @@ export function CitizensPage() {
             <thead>
               <tr>
                 <th>ФИО</th>
+                <th>Паспорт</th>
                 <th>Национальность</th>
                 <th>Позывной</th>
                 <th>Группа</th>
@@ -113,6 +175,7 @@ export function CitizensPage() {
               {citizens.map((c) => (
                 <tr key={c.id}>
                   <td>{citizenDisplayFio(c)}</td>
+                  <td>{c.passport_number || "—"}</td>
                   <td>{citizenDisplayNationality(c)}</td>
                   <td>{c.nickname}</td>
                   <td>{c.group}</td>
