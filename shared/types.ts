@@ -16,6 +16,11 @@ export interface ProductInput {
   active?: boolean;
 }
 
+export interface CitizenManualInput {
+  fio: string;
+  passport_number: string;
+}
+
 export interface Citizen {
   id: number;
   qr_lookup: string;

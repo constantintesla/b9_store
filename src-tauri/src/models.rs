@@ -21,6 +21,12 @@ pub struct ProductInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CitizenManualInput {
+    pub fio: String,
+    pub passport_number: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Citizen {
     pub id: i64,
     pub qr_lookup: String,

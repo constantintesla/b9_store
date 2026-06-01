@@ -3,7 +3,7 @@ use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 use tauri::{Manager, State};
 
-use crate::models::Citizen;
+use crate::models::{Citizen, CitizenManualInput};
 use crate::qr::parse_qr_lookup;
 
 fn row_to_citizen(row: &rusqlite::Row) -> rusqlite::Result<Citizen> {
@@ -164,17 +164,72 @@ pub fn list_citizens(
 }
 
 #[tauri::command]
+pub fn create_citizen(
+    input: CitizenManualInput,
+    state: State<'_, DbState>,
+) -> Result<Citizen, String> {
+    let fio = input.fio.trim().to_string();
+    let passport_number = input.passport_number.trim().to_string();
+
+    if fio.is_empty() {
+        return Err("Укажите ФИО".into());
+    }
+    if passport_number.is_empty() {
+        return Err("Укажите номер паспорта".into());
+    }
+
+    let qr_lookup = passport_number.clone();
+    let conn = state.0.lock().map_err(|e| e.to_string())?;
+
+    let exists: bool = conn
+        .query_row(
+            "SELECT 1 FROM citizens WHERE qr_lookup = ?1 OR passport_number = ?1 LIMIT 1",
+            [&qr_lookup],
+            |_| Ok(true),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .unwrap_or(false);
+
+    if exists {
+        return Err("Покупатель с таким номером паспорта уже есть".into());
+    }
+
+    conn.execute(
+        "INSERT INTO citizens (qr_lookup, \"group\", nickname, fio, surname, first_name,
+         birth_date, number, passport_number, position, rank, nationality, registration)
+         VALUES (?1, '', '', ?2, '', '', '', '', ?3, '', '', '', '')",
+        params![qr_lookup, fio, passport_number],
+    )
+    .map_err(|e| e.to_string())?;
+
+    let id = conn.last_insert_rowid();
+    conn.query_row(
+        "SELECT id, qr_lookup, \"group\", nickname, fio, surname, first_name, birth_date,
+                number, passport_number, position, rank, nationality, registration
+         FROM citizens WHERE id = ?1",
+        [id],
+        row_to_citizen,
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn get_citizen_by_qr(
     qr_lookup: String,
     state: State<'_, DbState>,
 ) -> Result<Option<Citizen>, String> {
-    let lookup = parse_qr_lookup(&qr_lookup).ok_or_else(|| "Некорректный QR-код".to_string())?;
+    let lookup = parse_qr_lookup(&qr_lookup)
+        .unwrap_or_else(|| qr_lookup.trim().to_string());
+    if lookup.is_empty() {
+        return Err("Некорректный QR-код".into());
+    }
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     conn.query_row(
         "SELECT id, qr_lookup, \"group\", nickname, fio, surname, first_name, birth_date,
                 number, passport_number, position, rank, nationality, registration
-         FROM citizens WHERE qr_lookup = ?1",
-        [lookup],
+         FROM citizens WHERE qr_lookup = ?1 OR passport_number = ?1",
+        [&lookup],
         row_to_citizen,
     )
     .optional()

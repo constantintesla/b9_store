@@ -3,6 +3,7 @@ import type {
   AnalyticsOverview,
   AppSettings,
   Citizen,
+  CitizenManualInput,
   InventoryLine,
   InventorySession,
   MonthlySales,
@@ -35,6 +36,9 @@ export const api = {
 
   listCitizens: (search?: string, limit?: number) =>
     invoke<Citizen[]>("list_citizens", { search, limit }),
+
+  createCitizen: (input: CitizenManualInput) =>
+    invoke<Citizen>("create_citizen", { input }),
 
   getCitizenByQr: (qrLookup: string) =>
     invoke<Citizen | null>("get_citizen_by_qr", { qrLookup }),

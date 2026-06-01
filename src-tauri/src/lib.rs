@@ -33,6 +33,7 @@ pub fn run() {
             products::adjust_stock,
             citizens::parse_qr,
             citizens::list_citizens,
+            citizens::create_citizen,
             citizens::get_citizen_by_qr,
             citizens::import_citizens_from_registry,
             citizens::import_citizens_from_bytes,
