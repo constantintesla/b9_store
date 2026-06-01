@@ -22,6 +22,8 @@ fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<Product> {
 #[tauri::command]
 pub fn list_products(
     search: Option<String>,
+    limit: Option<i64>,
+    active_only: Option<bool>,
     state: State<'_, DbState>,
 ) -> Result<Vec<Product>, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
@@ -30,18 +32,30 @@ pub fn list_products(
     let mut sql = String::from(
         "SELECT id, barcode, name, price, stock_qty, active, created_at FROM products WHERE 1=1",
     );
+    if active_only.unwrap_or(false) {
+        sql.push_str(" AND active = 1");
+    }
     if !q.is_empty() {
         sql.push_str(" AND (lower(name) LIKE ?1 OR lower(barcode) LIKE ?1)");
     }
     sql.push_str(" ORDER BY name COLLATE NOCASE");
+    if limit.is_some() {
+        sql.push_str(" LIMIT ?");
+    }
 
-    let pattern = format!("%{}%", q);
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
 
-    let rows = if q.is_empty() {
-        stmt.query_map([], row_to_product)
-    } else {
-        stmt.query_map([pattern], row_to_product)
+    let rows = match (q.is_empty(), limit) {
+        (true, Some(lim)) => stmt.query_map([lim], row_to_product),
+        (true, None) => stmt.query_map([], row_to_product),
+        (false, Some(lim)) => {
+            let pattern = format!("%{}%", q);
+            stmt.query_map((pattern, lim), row_to_product)
+        }
+        (false, None) => {
+            let pattern = format!("%{}%", q);
+            stmt.query_map([pattern], row_to_product)
+        }
     }
     .map_err(|e| e.to_string())?;
 

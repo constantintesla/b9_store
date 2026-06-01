@@ -36,3 +36,8 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 url = "2"
 urlencoding = "2"
 
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
+

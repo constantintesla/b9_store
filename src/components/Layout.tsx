@@ -3,7 +3,7 @@ import { usePlatform } from "../hooks/usePlatform";
 import { MobileLayout } from "./MobileLayout";
 
 const NAV: { id: PageId; label: string; hint: string }[] = [
-  { id: "checkout", label: "Касса", hint: "F2 — покупатель, F4 — товар" },
+  { id: "checkout", label: "Касса", hint: "Сканер или выбор из списка" },
   { id: "products", label: "Товары", hint: "Сканируйте для добавления" },
   { id: "add-products", label: "Добавление", hint: "Название, коды, цена" },
   { id: "citizens", label: "Покупатели", hint: "Реестр из b9_docs" },

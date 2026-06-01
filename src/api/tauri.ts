@@ -17,8 +17,12 @@ import type {
 } from "../../shared/types";
 
 export const api = {
-  listProducts: (search?: string) =>
-    invoke<Product[]>("list_products", { search }),
+  listProducts: (search?: string, limit?: number, activeOnly?: boolean) =>
+    invoke<Product[]>("list_products", {
+      search,
+      limit,
+      active_only: activeOnly,
+    }),
 
   getProductByBarcode: (barcode: string) =>
     invoke<Product | null>("get_product_by_barcode", { barcode }),

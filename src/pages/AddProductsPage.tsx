@@ -3,10 +3,16 @@ import { api } from "../api/tauri";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { useCameraScan } from "../hooks/useCameraScan";
 import { usePlatform } from "../hooks/usePlatform";
+import type { Product } from "../../shared/types";
 import {
   looksLikeUrlOrCitizenQr,
   normalizeScanCode,
 } from "../utils/scan";
+
+interface PendingScan {
+  code: string;
+  existing: Product | null;
+}
 
 export function AddProductsPage() {
   const { isMobile } = usePlatform();
@@ -15,6 +21,8 @@ export function AddProductsPage() {
   const [price, setPrice] = useState("");
   const [scans, setScans] = useState<string[]>([]);
   const [manualCode, setManualCode] = useState("");
+  const [pending, setPending] = useState<PendingScan | null>(null);
+  const [lookupBusy, setLookupBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,38 +37,62 @@ export function AddProductsPage() {
 
   const totalQty = scans.length;
 
-  const addCode = useCallback((raw: string) => {
-    const code = normalizeScanCode(raw);
-    if (!code) return;
+  const resolveRawCode = useCallback(async (raw: string): Promise<string | null> => {
+    let code = normalizeScanCode(raw);
+    if (!code) return null;
 
-    setScans((prev) => [...prev, code]);
-    setStatus(`Отсканировано: ${code}`);
-    setError("");
+    if (looksLikeUrlOrCitizenQr(raw)) {
+      try {
+        const parsed = await api.parseQr(raw.trim());
+        if (parsed) code = normalizeScanCode(parsed);
+      } catch {
+        /* штрихкод как есть */
+      }
+    }
+    return code;
   }, []);
 
-  const addCodeFromScan = useCallback(
+  const lookupCode = useCallback(
     async (raw: string) => {
-      let code = normalizeScanCode(raw);
-      if (!code) return;
-
-      if (looksLikeUrlOrCitizenQr(raw)) {
-        try {
-          const parsed = await api.parseQr(raw.trim());
-          if (parsed) code = normalizeScanCode(parsed);
-        } catch {
-          /* штрихкод как есть */
+      setError("");
+      setLookupBusy(true);
+      try {
+        const code = await resolveRawCode(raw);
+        if (!code) {
+          setError("Не удалось распознать код");
+          setPending(null);
+          return;
         }
-      }
 
-      addCode(code);
+        const existing = await api.getProductByBarcode(code);
+        setPending({ code, existing });
+        if (existing) {
+          setStatus(`Найден: ${existing.name}`);
+        } else {
+          setStatus(`Код ${code} — новый товар`);
+        }
+      } catch (e) {
+        setError(String(e));
+        setPending(null);
+      } finally {
+        setLookupBusy(false);
+      }
     },
-    [addCode],
+    [resolveRawCode],
   );
 
+  const addPendingToList = useCallback(() => {
+    if (!pending) return;
+    setScans((prev) => [...prev, pending.code]);
+    setStatus(`В списке: ${pending.code}`);
+    setPending(null);
+    setManualCode("");
+  }, [pending]);
+
   useBarcodeScanner({
-    enabled: true,
+    enabled: !lookupBusy,
     onScan: (code) => {
-      void addCodeFromScan(code);
+      void lookupCode(code);
     },
   });
 
@@ -74,6 +106,7 @@ export function AddProductsPage() {
 
   const clearScans = () => {
     setScans([]);
+    setPending(null);
     setStatus("");
   };
 
@@ -91,7 +124,7 @@ export function AddProductsPage() {
       return;
     }
     if (codeCounts.length === 0) {
-      setError("Отсканируйте хотя бы один штрихкод или QR");
+      setError("Добавьте в список хотя бы один штрихкод");
       return;
     }
 
@@ -140,6 +173,7 @@ export function AddProductsPage() {
       setPrice("");
       setScans([]);
       setManualCode("");
+      setPending(null);
       const parts = [];
       if (created) parts.push(`добавлено: ${created}`);
       if (updated) parts.push(`остаток увеличен: ${updated}`);
@@ -154,16 +188,85 @@ export function AddProductsPage() {
     }
   };
 
+  const nameMismatch =
+    pending?.existing &&
+    name.trim() &&
+    pending.existing.name !== name.trim();
+
+  const priceMismatch =
+    pending?.existing &&
+    price !== "" &&
+    Number.isFinite(Number(price)) &&
+    pending.existing.price !== Number(price);
+
   return (
     <div className={`page ${isMobile ? "mobile-page" : ""}`}>
       {scanner}
       <header className="page-header">
         <h1>Добавление товаров</h1>
         <p>
-          Название и цена — затем сканируйте штрихкоды или QR. Повторный скан
-          увеличивает количество.
+          Сканируйте код → проверьте результат → нажмите «Добавить в список».
+          В конце — «Сохранить на склад».
         </p>
       </header>
+
+      <section className={`panel scan-preview ${pending ? "scan-preview-active" : ""}`}>
+        <h2>Результат сканирования</h2>
+        {lookupBusy && <p className="muted">Поиск…</p>}
+        {!lookupBusy && !pending && (
+          <p className="muted">
+            Наведите сканер на штрихкод или QR — здесь появится карточка товара
+          </p>
+        )}
+        {pending && !lookupBusy && (
+          <>
+            <div className="scan-preview-code">
+              <span className="muted">Код</span>
+              <code>{pending.code}</code>
+            </div>
+            {pending.existing ? (
+              <div className="scan-preview-found">
+                <span className="scan-preview-badge found">В базе</span>
+                <strong>{pending.existing.name}</strong>
+                <div className="muted">
+                  Цена: {pending.existing.price.toFixed(2)} ₽ · на складе:{" "}
+                  {pending.existing.stock_qty}
+                </div>
+                {(nameMismatch || priceMismatch) && (
+                  <p className="scan-preview-warn">
+                    Название или цена в форме не совпадают с товаром в базе —
+                    при сохранении код может быть отклонён.
+                  </p>
+                )}
+                <p className="muted">
+                  В список: +1 к остатку этого товара (при совпадении названия и
+                  цены)
+                </p>
+              </div>
+            ) : (
+              <div className="scan-preview-found">
+                <span className="scan-preview-badge new">Новый</span>
+                <p>
+                  Товара с таким кодом нет — будет создан с названием и ценой из
+                  формы ниже
+                </p>
+              </div>
+            )}
+            <div className="actions scan-preview-actions">
+              <button
+                type="button"
+                className="primary"
+                onClick={addPendingToList}
+              >
+                Добавить в список
+              </button>
+              <button type="button" onClick={() => setPending(null)}>
+                Отмена
+              </button>
+            </div>
+          </>
+        )}
+      </section>
 
       <div className="two-col">
         <section className="panel">
@@ -195,15 +298,12 @@ export function AddProductsPage() {
             <button
               type="button"
               className="primary scan-btn"
+              disabled={lookupBusy}
               onClick={() =>
-                startScan(
-                  "Штрихкод / QR",
-                  (code) => void addCodeFromScan(code),
-                  { continuous: true },
-                )
+                startScan("Штрихкод / QR", (code) => void lookupCode(code))
               }
             >
-              Сканировать камерой (подряд)
+              Сканировать камерой
             </button>
           )}
           <div className="field-row">
@@ -213,26 +313,21 @@ export function AddProductsPage() {
               placeholder="Штрихкод / QR вручную"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && manualCode.trim()) {
-                  void addCodeFromScan(manualCode.trim());
-                  setManualCode("");
+                  void lookupCode(manualCode.trim());
                 }
               }}
             />
             <button
               type="button"
-              onClick={() => {
-                if (manualCode.trim()) {
-                  void addCodeFromScan(manualCode.trim());
-                  setManualCode("");
-                }
-              }}
+              disabled={lookupBusy || !manualCode.trim()}
+              onClick={() => void lookupCode(manualCode.trim())}
             >
-              Добавить код
+              Найти
             </button>
           </div>
 
           <div className="scan-summary">
-            Отсканировано: <strong>{totalQty}</strong> · уникальных кодов:{" "}
+            В списке: <strong>{totalQty}</strong> шт. · уникальных кодов:{" "}
             <strong>{codeCounts.length}</strong>
           </div>
 
@@ -240,21 +335,25 @@ export function AddProductsPage() {
             <button
               type="button"
               className="primary"
-              disabled={busy}
+              disabled={busy || codeCounts.length === 0}
               onClick={() => void submit()}
             >
-              {busy ? "Сохранение…" : "Добавить товар"}
+              {busy ? "Сохранение…" : "Сохранить на склад"}
             </button>
-            <button type="button" disabled={busy || scans.length === 0} onClick={clearScans}>
-              Очистить коды
+            <button
+              type="button"
+              disabled={busy || (scans.length === 0 && !pending)}
+              onClick={clearScans}
+            >
+              Очистить
             </button>
           </div>
         </section>
 
         <section className="panel">
-          <h2>Отсканированные коды</h2>
+          <h2>Список к сохранению</h2>
           {codeCounts.length === 0 ? (
-            <p className="muted">Наведите сканер на штрихкод или QR</p>
+            <p className="muted">Пока пусто — подтвердите сканы кнопкой выше</p>
           ) : (
             <table className="data-table">
               <thead>

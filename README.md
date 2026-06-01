@@ -66,7 +66,11 @@ powershell -ExecutionPolicy Bypass -File scripts/create-release-keystore.ps1
 npm run android:build
 ```
 
-APK: `src-tauri\gen\android\app\build\outputs\apk\universal\debug\app-universal-debug.apk`
+APK (arm64, ~30–45 МБ): `src-tauri\gen\android\app\build\outputs\apk\arm64\debug\app-arm64-debug.apk`
+
+Сборка со всеми ABI (эмулятор + старые телефоны): `npm run android:build:universal`
+
+> Раньше universal debug APK раздувался до ~500+ МБ из‑за `keepDebugSymbols` и выравнивания 16KB. Скрипт `patch-android-gradle.ps1` это отключает.
 
 ### Release APK (для касс)
 
@@ -74,7 +78,7 @@ APK: `src-tauri\gen\android\app\build\outputs\apk\universal\debug\app-universal-
 npm run android:build:release
 ```
 
-APK: `src-tauri\gen\android\app\build\outputs\apk\universal\release\app-universal-release.apk`
+APK: `src-tauri\gen\android\app\build\outputs\apk\arm64\release\app-arm64-release.apk`
 
 ### Установка на телефон (sideload)
 

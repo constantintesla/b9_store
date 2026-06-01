@@ -11,6 +11,7 @@
     "android:dev": "tauri android dev",
     "android:build": "powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1",
     "android:build:release": "powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1 -Release",
+    "android:build:universal": "powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1 -Universal",
     "android:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-android.ps1",
     "android:build:apk": "powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1 -Release"
   },

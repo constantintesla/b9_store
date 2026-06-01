@@ -2,9 +2,13 @@
 # Использование:
 #   powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1 -Release
+#   powershell -ExecutionPolicy Bypass -File scripts/android-build.ps1 -Universal
+#
+# По умолчанию: только arm64-v8a (~30–45 МБ APK). -Universal: все ABI (~60–70 МБ без padding-бага).
 
 param(
-    [switch]$Release
+    [switch]$Release,
+    [switch]$Universal
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,7 +51,6 @@ $env:TAURI_ANDROID_PROJECT_PATH = $GenAndroid
 $env:WRY_ANDROID_PACKAGE = "ru.preshevkadastr.b9store"
 $env:WRY_ANDROID_LIBRARY = "b9_store_lib"
 $env:TAURI_ANDROID_PACKAGE_UNESCAPED = "ru.preshevkadastr.b9store"
-# Gradle может оставить kotlin out dir без package — тогда cargo падает.
 Remove-Item Env:WRY_ANDROID_KOTLIN_FILES_OUT_DIR -ErrorAction SilentlyContinue
 $env:Path = "$JavaHome\bin;$SdkRoot\platform-tools;$SdkRoot\cmdline-tools\latest\bin;$env:USERPROFILE\.cargo\bin;" + $env:Path
 
@@ -55,17 +58,18 @@ if (-not (Test-Path $GenAndroid)) {
     Write-Error "Android-проект не инициализирован. Выполните: npx tauri android init --ci"
 }
 
-# Gradle profile (debug = отладочный APK, release = подписанный для продакшена).
 $gradleProfile = if ($Release) { "release" } else { "debug" }
-# Rust всегда собираем в release: иначе включается dev-режим (localhost:1420).
 $rustProfile = "release"
+$gradleFlavor = if ($Universal) { "universal" } else { "arm64" }
 
-$targets = [ordered]@{
-    "aarch64-linux-android"   = @{ abi = "arm64-v8a"; clang = "aarch64-linux-android34-clang.cmd" }
-    "armv7-linux-androideabi" = @{ abi = "armeabi-v7a"; clang = "armv7a-linux-androideabi34-clang.cmd" }
-    "i686-linux-android"      = @{ abi = "x86"; clang = "i686-linux-android34-clang.cmd" }
-    "x86_64-linux-android"    = @{ abi = "x86_64"; clang = "x86_64-linux-android34-clang.cmd" }
+$allTargets = [ordered]@{
+    "aarch64-linux-android"   = @{ abi = "arm64-v8a"; clang = "aarch64-linux-android34-clang.cmd"; gradleArch = "Arm64" }
+    "armv7-linux-androideabi" = @{ abi = "armeabi-v7a"; clang = "armv7a-linux-androideabi34-clang.cmd"; gradleArch = "Arm" }
+    "i686-linux-android"      = @{ abi = "x86"; clang = "i686-linux-android34-clang.cmd"; gradleArch = "X86" }
+    "x86_64-linux-android"    = @{ abi = "x86_64"; clang = "x86_64-linux-android34-clang.cmd"; gradleArch = "X86_64" }
 }
+
+$targets = if ($Universal) { $allTargets } else { [ordered]@{ "aarch64-linux-android" = $allTargets["aarch64-linux-android"] } }
 
 $NdkBin = Join-Path $NdkHome "toolchains\llvm\prebuilt\windows-x86_64\bin"
 
@@ -83,12 +87,19 @@ function Set-AndroidTargetEnv {
     Set-Item -Path "env:CARGO_TARGET_${envKey}_LINKER" -Value $cc
 }
 
+Write-Host "==> Patch Android Gradle (APK size)"
+& (Join-Path $PSScriptRoot "patch-android-gradle.ps1")
+
 Write-Host "==> Frontend build"
 Push-Location $Root
 npm run build
 Pop-Location
 
-Write-Host "==> Rust build ($rustProfile, Gradle: $gradleProfile)"
+Write-Host "==> Rust build ($rustProfile, flavor: $gradleFlavor, Gradle: $gradleProfile)"
+if (Test-Path $JniBase) {
+    Remove-Item $JniBase -Recurse -Force
+}
+
 foreach ($entry in $targets.GetEnumerator()) {
     $rustTarget = $entry.Key
     $abi = $entry.Value.abi
@@ -117,7 +128,9 @@ Write-Host "==> Patch AndroidManifest"
 
 Write-Host "==> Gradle assemble"
 Push-Location $GenAndroid
-$gradleTask = if ($Release) { "assembleUniversalRelease" } else { "assembleUniversalDebug" }
+$flavorCap = $gradleFlavor.Substring(0, 1).ToUpper() + $gradleFlavor.Substring(1)
+$gradleTask = "assemble${flavorCap}$($gradleProfile.Substring(0,1).ToUpper())$($gradleProfile.Substring(1))"
+
 $skipRust = @(
     "-x", "rustBuildUniversalDebug",
     "-x", "rustBuildArm64Debug",
@@ -138,9 +151,9 @@ if ($Release) {
 if ($LASTEXITCODE -ne 0) { throw "Gradle build failed" }
 Pop-Location
 
-$outDir = Join-Path $GenAndroid "app\build\outputs\apk\universal\$gradleProfile"
+$outDir = Join-Path $GenAndroid "app\build\outputs\apk\$gradleFlavor\$gradleProfile"
 Write-Host ""
-Write-Host "APK готов в: $outDir"
+Write-Host "APK ($gradleFlavor): $outDir"
 Get-ChildItem $outDir -Filter "*.apk" -ErrorAction SilentlyContinue | ForEach-Object {
     Write-Host "  $($_.FullName) ($([math]::Round($_.Length/1MB, 2)) MB)"
 }
