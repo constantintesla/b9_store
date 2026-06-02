@@ -2,9 +2,71 @@ use crate::db::DbState;
 use crate::models::{Product, ProductInput};
 use rusqlite::{params, OptionalExtension};
 use tauri::State;
+use uuid::Uuid;
+
+const INTERNAL_BARCODE_PREFIX: &str = "B9-";
 
 fn normalize_barcode(s: &str) -> String {
     s.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+fn generate_internal_barcode() -> String {
+    format!("{}{}", INTERNAL_BARCODE_PREFIX, Uuid::new_v4().simple())
+}
+
+fn resolve_barcode_for_create(input: &str) -> String {
+    let barcode = normalize_barcode(input);
+    if barcode.is_empty() {
+        generate_internal_barcode()
+    } else {
+        barcode
+    }
+}
+
+fn barcode_lookup_variants(code: &str) -> Vec<String> {
+    let mut variants = Vec::new();
+    let mut push = |s: String| {
+        if !s.is_empty() && !variants.contains(&s) {
+            variants.push(s);
+        }
+    };
+
+    push(code.to_string());
+
+    let digits: String = code.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return variants;
+    }
+
+    push(digits.clone());
+    if digits.len() <= 13 {
+        push(format!("{:0>13}", digits));
+    }
+    let trimmed = digits.trim_start_matches('0').to_string();
+    if !trimmed.is_empty() && trimmed != digits {
+        push(trimmed.clone());
+        if trimmed.len() <= 13 {
+            push(format!("{:0>13}", trimmed));
+        }
+    }
+
+    variants
+}
+
+fn find_product_by_barcode_variants(
+    conn: &rusqlite::Connection,
+    code: &str,
+) -> Result<Option<Product>, String> {
+    for variant in barcode_lookup_variants(code) {
+        if let Ok(product) = conn.query_row(
+            "SELECT id, barcode, name, price, stock_qty, active, created_at FROM products WHERE barcode = ?1 AND active = 1",
+            [&variant],
+            row_to_product,
+        ) {
+            return Ok(Some(product));
+        }
+    }
+    Ok(None)
 }
 
 fn row_to_product(row: &rusqlite::Row) -> rusqlite::Result<Product> {
@@ -72,13 +134,7 @@ pub fn get_product_by_barcode(
     if code.is_empty() {
         return Ok(None);
     }
-    conn.query_row(
-        "SELECT id, barcode, name, price, stock_qty, active, created_at FROM products WHERE barcode = ?1 AND active = 1",
-        [code],
-        row_to_product,
-    )
-    .optional()
-    .map_err(|e| e.to_string())
+    find_product_by_barcode_variants(&conn, &code)
 }
 
 #[tauri::command]
@@ -87,10 +143,7 @@ pub fn create_product(
     state: State<'_, DbState>,
 ) -> Result<Product, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
-    let barcode = normalize_barcode(&input.barcode);
-    if barcode.is_empty() {
-        return Err("Штрихкод обязателен".into());
-    }
+    let barcode = resolve_barcode_for_create(&input.barcode);
     if input.name.trim().is_empty() {
         return Err("Название обязательно".into());
     }
@@ -120,10 +173,27 @@ pub fn update_product(
     let conn = state.0.lock().map_err(|e| e.to_string())?;
     let active = if input.active.unwrap_or(true) { 1 } else { 0 };
 
+    let existing_barcode: String = conn
+        .query_row(
+            "SELECT barcode FROM products WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+
+    let barcode = {
+        let normalized = normalize_barcode(&input.barcode);
+        if normalized.is_empty() {
+            existing_barcode
+        } else {
+            normalized
+        }
+    };
+
     conn.execute(
         "UPDATE products SET barcode = ?1, name = ?2, price = ?3, stock_qty = ?4, active = ?5 WHERE id = ?6",
         params![
-            normalize_barcode(&input.barcode),
+            barcode,
             input.name.trim(),
             input.price,
             input.stock_qty,

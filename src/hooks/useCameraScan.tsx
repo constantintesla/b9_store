@@ -1,15 +1,20 @@
 import { useCallback, useState } from "react";
-import { CameraScanner } from "../components/CameraScanner";
+import {
+  CameraScanner,
+  type ScanProfile,
+} from "../components/CameraScanner";
 
 export interface ScanOptions {
   /** Массовое сканирование без закрытия камеры после каждого кода. */
   continuous?: boolean;
+  scanProfile?: ScanProfile;
 }
 
 export function useCameraScan() {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("Сканирование");
   const [continuous, setContinuous] = useState(false);
+  const [scanProfile, setScanProfile] = useState<ScanProfile>("all");
   const [handler, setHandler] = useState<((code: string) => void) | null>(
     null,
   );
@@ -22,6 +27,7 @@ export function useCameraScan() {
     ) => {
       setTitle(scanTitle);
       setContinuous(options?.continuous ?? false);
+      setScanProfile(options?.scanProfile ?? "all");
       setHandler(() => onCode);
       setOpen(true);
     },
@@ -32,12 +38,14 @@ export function useCameraScan() {
     setOpen(false);
     setHandler(null);
     setContinuous(false);
+    setScanProfile("all");
   }, []);
 
   const scanner = (
     <CameraScanner
       open={open}
       title={title}
+      scanProfile={scanProfile}
       continuous={continuous}
       onClose={close}
       onResult={(code) => handler?.(code)}

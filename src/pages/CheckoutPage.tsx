@@ -36,6 +36,8 @@ export function CheckoutPage() {
   const [busy, setBusy] = useState(false);
   const buyerInputRef = useRef<HTMLInputElement>(null);
   const productInputRef = useRef<HTMLInputElement>(null);
+  const productLookupSeqRef = useRef(0);
+  const [scanCaptureActive, setScanCaptureActive] = useState(true);
   const [manualBuyer, setManualBuyer] = useState("");
   const [manualProduct, setManualProduct] = useState("");
 
@@ -77,15 +79,19 @@ export function CheckoutPage() {
 
   const addProductByBarcode = useCallback(
     async (barcode: string) => {
+      const seq = ++productLookupSeqRef.current;
       setError("");
       if (!buyer) {
         setError("Сначала выберите покупателя");
         return;
       }
       try {
-        const product = await api.getProductByBarcode(normalizeScanCode(barcode));
+        const code = normalizeScanCode(barcode);
+        const product = await api.getProductByBarcode(code);
+        if (seq !== productLookupSeqRef.current) return;
+
         if (!product) {
-          setError(`Товар «${barcode}» не найден. Добавьте в разделе «Товары».`);
+          setError(`Товар «${code}» не найден. Добавьте в разделе «Товары».`);
           return;
         }
         if (product.stock_qty <= 0) {
@@ -166,12 +172,15 @@ export function CheckoutPage() {
   };
 
   useBarcodeScanner({
-    enabled: mode === "scan",
+    enabled: mode === "scan" && scanCaptureActive,
     onScan: (code) => {
       if (!buyer) void resolveBuyer(code);
       else void addProductByBarcode(code);
     },
   });
+
+  const pauseUsbScan = () => setScanCaptureActive(false);
+  const resumeUsbScan = () => setScanCaptureActive(true);
 
   useEffect(() => {
     if (isMobile) return;
@@ -342,7 +351,9 @@ export function CheckoutPage() {
                 type="button"
                 className="primary scan-btn"
                 onClick={() =>
-                  startScan("QR паспорта", (code) => void resolveBuyer(code))
+                  startScan("QR паспорта", (code) => void resolveBuyer(code), {
+                    scanProfile: "qr",
+                  })
                 }
               >
                 Сканировать паспорт
@@ -354,6 +365,8 @@ export function CheckoutPage() {
                   placeholder="QR паспорта или qr_lookup (F2)"
                   value={manualBuyer}
                   onChange={(e) => setManualBuyer(e.target.value)}
+                  onFocus={pauseUsbScan}
+                  onBlur={resumeUsbScan}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && manualBuyer.trim()) {
                       void resolveBuyer(manualBuyer.trim());
@@ -387,6 +400,11 @@ export function CheckoutPage() {
 
           <section className="panel scan-panel">
             <h2>Товар</h2>
+            {!isMobile && (
+              <p className="muted scan-usb-hint">
+                USB-сканер активен, когда курсор не в полях ввода (F2 / F4)
+              </p>
+            )}
             {isMobile ? (
               <button
                 type="button"
@@ -396,7 +414,7 @@ export function CheckoutPage() {
                   startScan(
                     "Штрихкод товара",
                     (code) => void addProductByBarcode(code),
-                    { continuous: true },
+                    { continuous: true, scanProfile: "barcode" },
                   )
                 }
               >
@@ -409,6 +427,8 @@ export function CheckoutPage() {
                   placeholder="Штрихкод (F4)"
                   value={manualProduct}
                   onChange={(e) => setManualProduct(e.target.value)}
+                  onFocus={pauseUsbScan}
+                  onBlur={resumeUsbScan}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && manualProduct.trim()) {
                       void addProductByBarcode(manualProduct.trim());

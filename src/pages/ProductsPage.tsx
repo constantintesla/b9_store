@@ -3,6 +3,7 @@ import { api } from "../api/tauri";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { usePlatform } from "../hooks/usePlatform";
 import type { Product, ProductInput } from "../../shared/types";
+import { formatProductBarcode } from "../utils/product";
 
 const emptyForm = (): ProductInput => ({
   barcode: "",
@@ -89,10 +90,11 @@ export function ProductsPage() {
           <h2>{editingId ? "Редактирование" : "Новый товар"}</h2>
           <div className="form-grid">
             <label>
-              Штрихкод
+              Штрихкод (необязательно)
               <input
                 value={form.barcode}
                 onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                placeholder="Пусто — товар без штрихкода"
               />
             </label>
             <label>
@@ -162,7 +164,7 @@ export function ProductsPage() {
                   <div>
                     {p.price.toFixed(2)} ₽ · остаток {p.stock_qty}
                   </div>
-                  <div className="muted">{p.barcode}</div>
+                  <div className="muted">{formatProductBarcode(p.barcode)}</div>
                 </li>
               ))}
             </ul>
@@ -180,7 +182,7 @@ export function ProductsPage() {
             <tbody>
               {products.map((p) => (
                 <tr key={p.id}>
-                  <td>{p.barcode}</td>
+                  <td>{formatProductBarcode(p.barcode)}</td>
                   <td>{p.name}</td>
                   <td>{p.price.toFixed(2)}</td>
                   <td>{p.stock_qty}</td>
