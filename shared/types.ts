@@ -130,10 +130,13 @@ export interface SyncResult {
   errors: string[];
 }
 
+export type CheckoutMode = "scan" | "menu";
+
 export interface AppSettings {
   server_url: string;
   device_token: string;
   auto_sync_minutes: number;
+  default_checkout_mode: CheckoutMode;
 }
 
 export type PageId =

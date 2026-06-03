@@ -4,6 +4,14 @@ use tauri::State;
 
 const DEFAULT_SERVER: &str = "https://preshevkadastr.ru";
 
+fn normalize_checkout_mode(raw: &str) -> String {
+    if raw.trim() == "menu" {
+        "menu".to_string()
+    } else {
+        "scan".to_string()
+    }
+}
+
 #[tauri::command]
 pub fn get_settings(state: State<'_, DbState>) -> Result<AppSettings, String> {
     let conn = state.0.lock().map_err(|e| e.to_string())?;
@@ -18,6 +26,10 @@ pub fn get_settings(state: State<'_, DbState>) -> Result<AppSettings, String> {
             .map_err(|e| e.to_string())?
             .and_then(|v| v.parse().ok())
             .unwrap_or(15),
+        default_checkout_mode: get_setting(&conn, "default_checkout_mode")
+            .map_err(|e| e.to_string())?
+            .map(|v| normalize_checkout_mode(&v))
+            .unwrap_or_else(|| "scan".to_string()),
     })
 }
 
@@ -32,6 +44,12 @@ pub fn save_settings(settings: AppSettings, state: State<'_, DbState>) -> Result
         &conn,
         "auto_sync_minutes",
         &settings.auto_sync_minutes.to_string(),
+    )
+    .map_err(|e| e.to_string())?;
+    set_setting(
+        &conn,
+        "default_checkout_mode",
+        &normalize_checkout_mode(&settings.default_checkout_mode),
     )
     .map_err(|e| e.to_string())?;
     Ok(())

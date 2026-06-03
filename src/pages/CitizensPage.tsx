@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
-import { readFile } from "@tauri-apps/plugin-fs";
 import { api } from "../api/tauri";
 import type { Citizen } from "../../shared/types";
-import { citizenDisplayFio, citizenDisplayNationality } from "../utils/citizen";
-import { isMobilePlatform, usePlatform } from "../hooks/usePlatform";
+import {
+  citizenDisplayDocumentNumber,
+  citizenDisplayFio,
+  citizenDisplayGroup,
+  citizenDisplayNationality,
+} from "../utils/citizen";
+import { usePlatform } from "../hooks/usePlatform";
 
 const emptyManual = { fio: "", passport_number: "" };
 
@@ -38,24 +41,13 @@ export function CitizensPage() {
     void load();
   }, [load]);
 
-  const importRegistry = async () => {
+  const syncRegistry = async () => {
     setError("");
-    const path = await open({
-      title: "Выберите registry.db из b9_docs",
-      filters: [{ name: "SQLite", extensions: ["db"] }],
-      multiple: false,
-    });
-    if (!path || typeof path !== "string") return;
-
+    setStatus("");
     setBusy(true);
     try {
-      const mobile = await isMobilePlatform();
-      const imported = mobile
-        ? await api.importCitizensFromBytes(
-            Array.from(await readFile(path)),
-          )
-        : await api.importCitizensFromRegistry(path);
-      setStatus(`Импортировано записей: ${imported}`);
+      const imported = await api.syncCitizensFromDefaultRegistry();
+      setStatus(`Реестр обновлён: ${imported} записей`);
       await load();
     } catch (e) {
       setError(String(e));
@@ -102,13 +94,13 @@ export function CitizensPage() {
             />
           </label>
           <label>
-            Номер паспорта
+            Номер документа / паспорта
             <input
               value={manual.passport_number}
               onChange={(e) =>
                 setManual({ ...manual, passport_number: e.target.value })
               }
-              placeholder="1234 567890"
+              placeholder="как в QR или на бланке"
             />
           </label>
         </div>
@@ -123,18 +115,15 @@ export function CitizensPage() {
           </button>
         </div>
         <p className="muted" style={{ marginTop: "0.5rem" }}>
-          На кассе можно ввести номер паспорта вместо QR.
+          На кассе: скан QR с документа, номер из QR или ФИО. Реестр —{" "}
+          <a href="https://preshevkadastr.ru/user_card" target="_blank" rel="noreferrer">
+            user_card
+          </a>
+          , синхронизация в «Настройки».
         </p>
       </section>
 
       <div className="actions top-actions">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void importRegistry()}
-        >
-          {busy ? "Импорт…" : "Импорт registry.db"}
-        </button>
         <input
           placeholder="Поиск: ФИО, позывной, номер, паспорт, QR"
           value={search}
@@ -142,6 +131,13 @@ export function CitizensPage() {
         />
         <button type="button" onClick={() => void load()}>
           Найти
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void syncRegistry()}
+        >
+          {busy ? "Загрузка…" : "Обновить из реестра"}
         </button>
       </div>
 
@@ -153,7 +149,7 @@ export function CitizensPage() {
                 <strong>{citizenDisplayFio(c)}</strong>
                 <div>{citizenDisplayNationality(c)}</div>
                 <div className="muted">
-                  паспорт: {c.passport_number || "—"} · {c.group || "—"} ·{" "}
+                  номер: {citizenDisplayDocumentNumber(c)} · {citizenDisplayGroup(c)} ·{" "}
                   {c.qr_lookup}
                 </div>
               </li>
@@ -164,7 +160,7 @@ export function CitizensPage() {
             <thead>
               <tr>
                 <th>ФИО</th>
-                <th>Паспорт</th>
+                <th>Номер</th>
                 <th>Национальность</th>
                 <th>Позывной</th>
                 <th>Группа</th>
@@ -175,10 +171,10 @@ export function CitizensPage() {
               {citizens.map((c) => (
                 <tr key={c.id}>
                   <td>{citizenDisplayFio(c)}</td>
-                  <td>{c.passport_number || "—"}</td>
+                  <td>{citizenDisplayDocumentNumber(c)}</td>
                   <td>{citizenDisplayNationality(c)}</td>
                   <td>{c.nickname}</td>
-                  <td>{c.group}</td>
+                  <td>{citizenDisplayGroup(c)}</td>
                   <td>{c.qr_lookup}</td>
                 </tr>
               ))}

@@ -50,6 +50,9 @@ export const api = {
   importCitizensFromRegistry: (path: string) =>
     invoke<number>("import_citizens_from_registry", { path }),
 
+  syncCitizensFromDefaultRegistry: () =>
+    invoke<number>("sync_citizens_from_default_registry"),
+
   importCitizensFromBytes: (data: number[]) =>
     invoke<number>("import_citizens_from_bytes", { data }),
 

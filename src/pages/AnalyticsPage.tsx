@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api/tauri";
+import { displayGroupLabel } from "../utils/citizen";
 import { usePlatform } from "../hooks/usePlatform";
 import type {
   AnalyticsOverview,
@@ -151,7 +152,7 @@ export function AnalyticsPage() {
             {topBuyers.map((b) => (
               <tr key={b.citizen_qr_lookup}>
                 <td>{b.citizen_fio}</td>
-                <td>{b.citizen_group}</td>
+                <td>{displayGroupLabel(b.citizen_group)}</td>
                 <td>{b.purchase_count}</td>
                 <td>{b.total_spent.toFixed(2)}</td>
               </tr>

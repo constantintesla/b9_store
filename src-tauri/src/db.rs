@@ -100,6 +100,7 @@ pub fn open_connection(app: &AppHandle) -> SqlResult<Connection> {
     let conn = Connection::open(path)?;
     conn.execute("PRAGMA foreign_keys = ON", [])?;
     conn.execute_batch(SCHEMA)?;
+    crate::citizen_search::ensure_schema(&conn)?;
     Ok(conn)
 }
 

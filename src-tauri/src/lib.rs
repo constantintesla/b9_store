@@ -1,4 +1,5 @@
 mod analytics;
+mod citizen_search;
 mod citizens;
 mod db;
 mod inventory;
@@ -36,6 +37,7 @@ pub fn run() {
             citizens::create_citizen,
             citizens::get_citizen_by_qr,
             citizens::import_citizens_from_registry,
+            citizens::sync_citizens_from_default_registry,
             citizens::import_citizens_from_bytes,
             citizens::import_citizens_to_sandbox_and_import,
             citizens::get_citizens_import_info,

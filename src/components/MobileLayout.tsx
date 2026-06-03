@@ -66,6 +66,18 @@ export function MobileLayout({
 
       <main className="main mobile-main">{children}</main>
 
+      <div className="app-footer app-footer--mobile">
+        <a
+          className="app-footer__link"
+          href="https://t.me/constantintesla"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Telegram"
+        >
+          preshevdev
+        </a>
+      </div>
+
       <nav className="bottom-nav">
         {TABS.map((tab) => (
           <button

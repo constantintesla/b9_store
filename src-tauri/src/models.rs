@@ -152,4 +152,5 @@ pub struct AppSettings {
     pub server_url: String,
     pub device_token: String,
     pub auto_sync_minutes: i64,
+    pub default_checkout_mode: String,
 }

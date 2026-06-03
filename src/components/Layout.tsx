@@ -49,6 +49,17 @@ function DesktopLayout({
             Не выгружено: {unsyncedCount} чек(ов)
           </div>
         )}
+        <div className="app-footer">
+          <a
+            className="app-footer__link"
+            href="https://t.me/constantintesla"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Telegram"
+          >
+            preshevdev
+          </a>
+        </div>
       </aside>
       <main className="main">{children}</main>
     </div>

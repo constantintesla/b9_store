@@ -1,17 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/tauri";
+import { ProductPickerModal } from "../components/ProductPickerModal";
 import { SearchCombobox } from "../components/SearchCombobox";
 import { useBarcodeScanner } from "../hooks/useBarcodeScanner";
 import { useCameraScan } from "../hooks/useCameraScan";
 import { usePlatform } from "../hooks/usePlatform";
-import type { Citizen, Product, SaleItemInput } from "../../shared/types";
+import type {
+  CheckoutMode,
+  Citizen,
+  Product,
+  SaleItemInput,
+} from "../../shared/types";
 import {
+  citizenDisplayDocumentNumber,
   citizenDisplayFio,
+  citizenDisplayGroup,
   citizenDisplayNationality,
 } from "../utils/citizen";
 import { normalizeScanCode } from "../utils/scan";
-
-type CheckoutMode = "scan" | "menu";
 
 const SUGGESTION_LIMIT = 15;
 
@@ -28,7 +34,7 @@ async function resolveCitizen(raw: string) {
 export function CheckoutPage() {
   const { isMobile } = usePlatform();
   const { startScan, scanner } = useCameraScan();
-  const [mode, setMode] = useState<CheckoutMode>("scan");
+  const [mode, setMode] = useState<CheckoutMode | null>(null);
   const [buyer, setBuyer] = useState<Citizen | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [status, setStatus] = useState("");
@@ -40,19 +46,30 @@ export function CheckoutPage() {
   const [scanCaptureActive, setScanCaptureActive] = useState(true);
   const [manualBuyer, setManualBuyer] = useState("");
   const [manualProduct, setManualProduct] = useState("");
+  const [productPickerOpen, setProductPickerOpen] = useState(false);
 
   const cartTotal = cart.reduce(
     (sum, line) => sum + line.unit_price * line.quantity,
     0,
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .getSettings()
+      .then((s) => {
+        if (!cancelled) setMode(s.default_checkout_mode);
+      })
+      .catch(() => {
+        if (!cancelled) setMode("scan");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const searchCitizens = useCallback(
     (query: string) => api.listCitizens(query, SUGGESTION_LIMIT),
-    [],
-  );
-
-  const searchProducts = useCallback(
-    (query: string) => api.listProducts(query, SUGGESTION_LIMIT, true),
     [],
   );
 
@@ -224,7 +241,7 @@ export function CheckoutPage() {
       await api.createSale({
         citizen_qr_lookup: buyer.qr_lookup,
         citizen_fio: citizenDisplayFio(buyer),
-        citizen_group: buyer.group,
+        citizen_group: citizenDisplayGroup(buyer),
         items: cart.map(
           ({ product_id, barcode, name, quantity, unit_price }) => ({
             product_id,
@@ -303,6 +320,16 @@ export function CheckoutPage() {
         </div>
       </li>
     ));
+
+  if (mode === null) {
+    return (
+      <div className={`page checkout-page ${isMobile ? "mobile-page" : ""}`}>
+        <header className="page-header">
+          <h1>Касса</h1>
+        </header>
+      </div>
+    );
+  }
 
   return (
     <div className={`page checkout-page ${isMobile ? "mobile-page" : ""}`}>
@@ -466,14 +493,17 @@ export function CheckoutPage() {
                 }}
                 getOptionKey={(c) => c.id}
                 getLabel={(c) => citizenDisplayFio(c)}
-                getHint={(c) => c.passport_number || c.qr_lookup}
+                getHint={(c) => citizenDisplayDocumentNumber(c)}
               />
             ) : (
               <div className="buyer-card selected-buyer">
                 <strong>{citizenDisplayFio(buyer)}</strong>
                 <div className="muted">
                   {citizenDisplayNationality(buyer)}
-                  {buyer.passport_number && ` · ${buyer.passport_number}`}
+                  {(() => {
+                    const doc = citizenDisplayDocumentNumber(buyer);
+                    return doc !== "—" ? ` · ${doc}` : null;
+                  })()}
                 </div>
                 <button
                   type="button"
@@ -491,17 +521,24 @@ export function CheckoutPage() {
             {!buyer ? (
               <p className="muted">Сначала выберите покупателя</p>
             ) : (
-              <SearchCombobox<Product>
-                placeholder="Название или штрихкод…"
-                onSearch={searchProducts}
-                onSelect={(p) => addProductFromList(p)}
-                getOptionKey={(p) => p.id}
-                getLabel={(p) => p.name}
-                getHint={(p) =>
-                  `${p.price.toFixed(2)} ₽ · остаток ${p.stock_qty}`
-                }
-                isOptionDisabled={(p) => p.stock_qty <= 0}
-              />
+              <>
+                <button
+                  type="button"
+                  className="primary product-picker-open"
+                  onClick={() => setProductPickerOpen(true)}
+                >
+                  Выбрать из каталога
+                </button>
+                <p className="muted product-picker-hint">
+                  Откроется список всех товаров с поиском. Можно добавить
+                  несколько позиций подряд.
+                </p>
+                <ProductPickerModal
+                  open={productPickerOpen}
+                  onClose={() => setProductPickerOpen(false)}
+                  onSelect={(p) => addProductFromList(p)}
+                />
+              </>
             )}
           </section>
         </div>
